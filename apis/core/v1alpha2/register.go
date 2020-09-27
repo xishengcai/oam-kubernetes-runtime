@@ -101,6 +101,14 @@ var (
 	HealthScopeGroupVersionKind = SchemeGroupVersion.WithKind(HealthScopeKind)
 )
 
+// VolumeTrait type metadata.
+var (
+	VolumeTraitKind             = reflect.TypeOf(VolumeTrait{}).Name()
+	VolumeTraitGroupKind        = schema.GroupKind{Group: Group, Kind: VolumeTraitKind}.String()
+	VolumeTraitKindAPIVersion   = VolumeTraitKind + "." + SchemeGroupVersion.String()
+	VolumeTraitGroupVersionKind = SchemeGroupVersion.WithKind(VolumeTraitKind)
+)
+
 func init() {
 	SchemeBuilder.Register(&WorkloadDefinition{}, &WorkloadDefinitionList{})
 	SchemeBuilder.Register(&TraitDefinition{}, &TraitDefinitionList{})
@@ -110,4 +118,5 @@ func init() {
 	SchemeBuilder.Register(&ContainerizedWorkload{}, &ContainerizedWorkloadList{})
 	SchemeBuilder.Register(&ManualScalerTrait{}, &ManualScalerTraitList{})
 	SchemeBuilder.Register(&HealthScope{}, &HealthScopeList{})
+	SchemeBuilder.Register(&VolumeTrait{}, &VolumeTraitList{})
 }

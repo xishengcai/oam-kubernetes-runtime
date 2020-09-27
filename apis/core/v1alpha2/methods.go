@@ -91,3 +91,23 @@ func (hs *HealthScope) GetWorkloadReferences() []runtimev1alpha1.TypedReference 
 func (hs *HealthScope) AddWorkloadReference(r runtimev1alpha1.TypedReference) {
 	hs.Spec.WorkloadReferences = append(hs.Spec.WorkloadReferences, r)
 }
+
+// GetCondition of this VolumeTrait.
+func (vt *VolumeTrait) GetCondition(ct runtimev1alpha1.ConditionType) runtimev1alpha1.Condition {
+	return vt.Status.GetCondition(ct)
+}
+
+// SetConditions of this VolumeTrait.
+func (vt *VolumeTrait) SetConditions(c ...runtimev1alpha1.Condition) {
+	vt.Status.SetConditions(c...)
+}
+
+// GetWorkloadReference of this VolumeTrait.
+func (vt *VolumeTrait) GetWorkloadReference() runtimev1alpha1.TypedReference {
+	return vt.Spec.WorkloadReference
+}
+
+// SetWorkloadReference of this VolumeTrait.
+func (vt *VolumeTrait) SetWorkloadReference(r runtimev1alpha1.TypedReference) {
+	vt.Spec.WorkloadReference = r
+}
