@@ -7,7 +7,7 @@ spec:
     - componentName: example-component
       parameterValues:
         - name: instance-name
-          value: example-appconfig-workload
+          value: example-appconfig-workload1
         - name: image
           value: wordpress:php7.2
       traits:
@@ -18,8 +18,20 @@ spec:
               name: example-appconfig-trait
             spec:
               replicaCount: 3
-      scopes:
-        - scopeRef:
+        - trait:
             apiVersion: core.oam.dev/v1alpha2
-            kind: HealthScope
-            name: example-health-scope
+            kind: VolumeTrait
+            metadata:
+              name: example-volume-trait
+            spec:
+              volumeList:
+              - containerIndex: 0
+                paths:
+                - size: 10Gi
+                  path: /var/log/test
+                  storageClassName: ali-sc
+#      status:
+#        - scopeRef:
+#            apiVersion: core.oam.dev/v1alpha2
+#            kind: HealthScope
+#            name: example-health-scope

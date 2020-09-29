@@ -17,20 +17,24 @@ limitations under the License.
 package v1alpha2
 
 import (
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2/core/traits/volumetrait"
+	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2/core/workloads/containerizedworkload"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2/applicationconfiguration"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2/core/scopes/healthscope"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2/core/traits/manualscalertrait"
-	"github.com/crossplane/oam-kubernetes-runtime/pkg/controller/v1alpha2/core/workloads/containerizedworkload"
 )
 
 // Setup workload controllers.
 func Setup(mgr ctrl.Manager, l logging.Logger) error {
 	for _, setup := range []func(ctrl.Manager, logging.Logger) error{
-		applicationconfiguration.Setup, containerizedworkload.Setup, manualscalertrait.Setup, healthscope.Setup,
+		applicationconfiguration.Setup,
+		containerizedworkload.Setup,
+		volumetrait.Setup,
+		//manualscalertrait.Setup,
+		//healthscope.Setup,
+		//volumetrait.Setup,
 	} {
 		if err := setup(mgr, l); err != nil {
 			return err

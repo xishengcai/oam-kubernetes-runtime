@@ -40,10 +40,16 @@ import (
 
 // Reconcile error strings.
 const (
-	errRenderWorkload  = "cannot render workload"
-	errRenderService   = "cannot render service"
-	errApplyDeployment = "cannot apply the deployment"
-	errApplyService    = "cannot apply the service"
+	errRenderWorkload     = "cannot render workload"
+	errApplyDeployment    = "cannot apply the deployment"
+	errApplyStatefulSet   = "cannot apply the statefulSet"
+	childResourceLabelKey = "app.oam.dev/childResource"
+)
+
+const (
+	deployment  = "deployment"
+	statefulSet = "statefulSet"
+	dynamic     = "dynamic"
 )
 
 // Setup adds a controller that reconciles ContainerizedWorkload.
@@ -60,9 +66,10 @@ func Setup(mgr ctrl.Manager, log logging.Logger) error {
 // Reconciler reconciles a ContainerizedWorkload object
 type Reconciler struct {
 	client.Client
-	log    logr.Logger
-	record event.Recorder
-	Scheme *runtime.Scheme
+	log           logr.Logger
+	record        event.Recorder
+	Scheme        *runtime.Scheme
+	childResource []string
 }
 
 // Reconcile reconciles a ContainerizedWorkload object
@@ -82,74 +89,92 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	log.Info("Get the workload", "apiVersion", workload.APIVersion, "kind", workload.Kind)
+	//log.Info("Get the workload", "apiVersion", workload.APIVersion, "kind", workload.Kind)
 	// find the resource object to record the event to, default is the parent appConfig.
+
 	eventObj, err := util.LocateParentAppConfig(ctx, r.Client, &workload)
 	if eventObj == nil {
 		// fallback to workload itself
 		log.Error(err, "workload", workload.Name)
 		eventObj = &workload
 	}
-	deploy, err := r.renderDeployment(ctx, &workload)
-	if err != nil {
-		log.Error(err, "Failed to render a deployment")
-		r.record.Event(eventObj, event.Warning(errRenderWorkload, err))
-		return util.ReconcileWaitResult,
-			util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderWorkload)))
-	}
-	// server side apply, only the fields we set are touched
-	applyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(workload.GetUID())}
-	if err := r.Patch(ctx, deploy, client.Apply, applyOpts...); err != nil {
-		log.Error(err, "Failed to apply to a deployment")
-		r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
-		return util.ReconcileWaitResult,
-			util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errApplyDeployment)))
-	}
-	r.record.Event(eventObj, event.Normal("Deployment created",
-		fmt.Sprintf("Workload `%s` successfully server side patched a deployment `%s`",
-			workload.Name, deploy.Name)))
 
-	// create a service for the workload
-	// TODO(rz): remove this after we have service trait
-	service, err := r.renderService(ctx, &workload, deploy)
-	if err != nil {
-		log.Error(err, "Failed to render a service")
-		r.record.Event(eventObj, event.Warning(errRenderService, err))
-		return util.ReconcileWaitResult,
-			util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderService)))
+	// applicationConfiguration write label by workload child define
+	if workload.Labels == nil {
+		log.Info("not define child resource")
+		return ctrl.Result{}, nil
 	}
-	// server side apply the service
-	if err := r.Patch(ctx, service, client.Apply, applyOpts...); err != nil {
-		log.Error(err, "Failed to apply a service")
-		r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
-		return util.ReconcileWaitResult,
-			util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errApplyService)))
-	}
-	r.record.Event(eventObj, event.Normal("Service created",
-		fmt.Sprintf("Workload `%s` successfully server side patched a service `%s`",
-			workload.Name, service.Name)))
-	// garbage collect the service/deployments that we created but not needed
-	if err := r.cleanupResources(ctx, &workload, &deploy.UID, &service.UID); err != nil {
-		log.Error(err, "Failed to clean up resources")
-		r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
-	}
+
+	childResource := workload.Labels[childResourceLabelKey]
+
+	//r.childResource = childResourceValue
 	workload.Status.Resources = nil
-	// record the new deployment, new service
-	workload.Status.Resources = append(workload.Status.Resources,
-		cpv1alpha1.TypedReference{
-			APIVersion: deploy.GetObjectKind().GroupVersionKind().GroupVersion().String(),
-			Kind:       deploy.GetObjectKind().GroupVersionKind().Kind,
-			Name:       deploy.GetName(),
-			UID:        deploy.UID,
-		},
-		cpv1alpha1.TypedReference{
-			APIVersion: service.GetObjectKind().GroupVersionKind().GroupVersion().String(),
-			Kind:       service.GetObjectKind().GroupVersionKind().Kind,
-			Name:       service.GetName(),
-			UID:        service.UID,
-		},
-	)
+	if childResource == util.KindStatefulSet {
+		sts, err := r.renderStatefulSet(ctx, &workload)
+		if err != nil {
+			log.Error(err, "Failed to render a statefulSet")
+			r.record.Event(eventObj, event.Warning(errRenderWorkload, err))
+			return util.ReconcileWaitResult,
+				util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderWorkload)))
+		}
+		// server side apply, only the fields we set are touched
+		applyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(workload.GetUID())}
+		if err := r.Patch(ctx, sts, client.Apply, applyOpts...); err != nil {
+			log.Error(err, "Failed to apply to a statefulSet")
+			r.record.Event(eventObj, event.Warning(errApplyStatefulSet, err))
+			return util.ReconcileWaitResult,
+				util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errApplyStatefulSet)))
+		}
+		workload.Status.Resources = append(workload.Status.Resources,
+			cpv1alpha1.TypedReference{
+				APIVersion: sts.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+				Kind:       sts.GetObjectKind().GroupVersionKind().Kind,
+				Name:       sts.GetName(),
+				UID:        sts.UID,
+			},
+		)
+		r.record.Event(eventObj, event.Normal("StatefulSet created",
+			fmt.Sprintf("Workload `%s` successfully server side patched a statefulSet `%s`", workload.Name, sts.Name)))
 
+		// garbage collect the statefulSet that we created but not needed
+		if err := r.cleanupResources(ctx, &workload, util.KindStatefulSet, sts.UID); err != nil {
+			log.Error(err, "Failed to clean up resources")
+			r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
+		}
+	} else {
+		deploy, err := r.renderDeployment(ctx, &workload)
+		if err != nil {
+			log.Error(err, "Failed to render a deployment")
+			r.record.Event(eventObj, event.Warning(errRenderWorkload, err))
+			return util.ReconcileWaitResult,
+				util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderWorkload)))
+		}
+		// server side apply, only the fields we set are touched
+		applyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(workload.GetUID())}
+		if err := r.Patch(ctx, deploy, client.Apply, applyOpts...); err != nil {
+			log.Error(err, "Failed to apply to a deployment")
+			r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
+			return util.ReconcileWaitResult,
+				util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errApplyDeployment)))
+		}
+		workload.Status.Resources = append(workload.Status.Resources,
+			cpv1alpha1.TypedReference{
+				APIVersion: deploy.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+				Kind:       deploy.GetObjectKind().GroupVersionKind().Kind,
+				Name:       deploy.GetName(),
+				UID:        deploy.UID,
+			},
+		)
+		r.record.Event(eventObj, event.Normal("Deployment created",
+			fmt.Sprintf("Workload `%s` successfully server side patched a deployment `%s`",
+				workload.Name, deploy.Name)))
+
+		// garbage collect the deployment that we created but not needed
+		if err := r.cleanupResources(ctx, &workload, util.KindDeployment, deploy.UID); err != nil {
+			log.Error(err, "Failed to clean up resources")
+			r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
+		}
+	}
 	if err := r.Status().Update(ctx, &workload); err != nil {
 		return util.ReconcileWaitResult, err
 	}

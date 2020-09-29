@@ -107,7 +107,7 @@ func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *Reconciler {
 // Reconcile an OAM HealthScope by keeping track of its health status.
 func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
 	log := r.log.WithValues("request", req)
-	log.Debug("Reconciling")
+	//log.Debug("Reconciling")
 
 	ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 	defer cancel()
@@ -131,13 +131,13 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	log = log.WithValues("uid", hs.GetUID(), "version", hs.GetResourceVersion())
 
 	if err := UpdateHealthStatus(ctx, log, r.client, hs); err != nil {
-		log.Debug("Could not update health status", "error", err, "requeue-after", time.Now().Add(shortWait))
+		//log.Debug("Could not update health status", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(hs, event.Warning(reasonHealthCheckFailed, err))
 		hs.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errUpdateHealthScopeStatus)))
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.client.Status().Update(ctx, hs), errUpdateHealthScopeStatus)
 	}
 
-	log.Debug("Successfully ran health check", "scope", hs.Name)
+	//log.Debug("Successfully ran health check", "scope", hs.Name)
 	r.record.Event(hs, event.Normal(reasonHealthCheck, "Successfully ran health check"))
 
 	elapsed := time.Since(start)

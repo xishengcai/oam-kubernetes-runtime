@@ -195,7 +195,7 @@ func NewReconciler(m ctrl.Manager, o ...ReconcilerOption) *OAMApplicationReconci
 // Components and Traits.
 func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reconcile.Result, returnErr error) {
 	log := r.log.WithValues("request", req)
-	log.Debug("Reconciling")
+	//log.Debug("Reconciling")
 
 	ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 	defer cancel()
@@ -210,7 +210,7 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 		for name, hook := range r.postHooks {
 			exeResult, err := hook.Exec(ctx, ac, log)
 			if err != nil {
-				log.Debug("Failed to execute post-hooks", "hook name", name, "error", err, "requeue-after", result.RequeueAfter)
+				//log.Debug("Failed to execute post-hooks", "hook name", name, "error", err, "requeue-after", result.RequeueAfter)
 				r.record.Event(ac, event.Warning(reasonCannotExecutePosthooks, err))
 				ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errExecutePosthooks)))
 				result = exeResult
@@ -226,7 +226,7 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 	for name, hook := range r.preHooks {
 		result, err := hook.Exec(ctx, ac, log)
 		if err != nil {
-			log.Debug("Failed to execute pre-hooks", "hook name", name, "error", err, "requeue-after", result.RequeueAfter)
+			//log.Debug("Failed to execute pre-hooks", "hook name", name, "error", err, "requeue-after", result.RequeueAfter)
 			r.record.Event(ac, event.Warning(reasonCannotExecutePrehooks, err))
 			ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errExecutePrehooks)))
 			return result, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
@@ -238,21 +238,21 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 
 	workloads, depStatus, err := r.components.Render(ctx, ac)
 	if err != nil {
-		log.Debug("Cannot render components", "error", err, "requeue-after", time.Now().Add(shortWait))
+		//log.Debug("Cannot render components", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(ac, event.Warning(reasonCannotRenderComponents, err))
 		ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errRenderComponents)))
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
 	}
-	log.Debug("Successfully rendered components", "workloads", len(workloads))
+	//log.Debug("Successfully rendered components", "workloads", len(workloads))
 	r.record.Event(ac, event.Normal(reasonRenderComponents, "Successfully rendered components", "workloads", strconv.Itoa(len(workloads))))
 
 	if err := r.workloads.Apply(ctx, ac.Status.Workloads, workloads, resource.MustBeControllableBy(ac.GetUID())); err != nil {
-		log.Debug("Cannot apply components", "error", err, "requeue-after", time.Now().Add(shortWait))
+		//log.Debug("Cannot apply components", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(ac, event.Warning(reasonCannotApplyComponents, err))
 		ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errApplyComponents)))
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
 	}
-	log.Debug("Successfully applied components", "workloads", len(workloads))
+	//log.Debug("Successfully applied components", "workloads", len(workloads))
 	r.record.Event(ac, event.Normal(reasonApplyComponents, "Successfully applied components", "workloads", strconv.Itoa(len(workloads))))
 
 	// Kubernetes garbage collection will (by default) reap workloads and traits
@@ -263,16 +263,16 @@ func (r *OAMApplicationReconciler) Reconcile(req reconcile.Request) (result reco
 		// https://github.com/golang/go/wiki/CommonMistakes#using-reference-to-loop-iterator-variable
 		e := e
 
-		log := log.WithValues("kind", e.GetKind(), "name", e.GetName())
+		//log := log.WithValues("kind", e.GetKind(), "name", e.GetName())
 		record := r.record.WithAnnotations("kind", e.GetKind(), "name", e.GetName())
 
 		if err := r.client.Delete(ctx, &e); resource.IgnoreNotFound(err) != nil {
-			log.Debug("Cannot garbage collect component", "error", err, "requeue-after", time.Now().Add(shortWait))
+			//log.Debug("Cannot garbage collect component", "error", err, "requeue-after", time.Now().Add(shortWait))
 			record.Event(ac, event.Warning(reasonCannotGGComponents, err))
 			ac.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errGCComponent)))
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.client.Status().Update(ctx, ac), errUpdateAppConfigStatus)
 		}
-		log.Debug("Garbage collected resource")
+		//log.Debug("Garbage collected resource")
 		record.Event(ac, event.Normal(reasonGGComponent, "Successfully garbage collected component"))
 	}
 

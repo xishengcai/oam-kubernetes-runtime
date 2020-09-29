@@ -86,6 +86,7 @@ func main() {
 		oamLog.Error(err, "unable to setup the oam core controller")
 		os.Exit(1)
 	}
+
 	oamLog.Info("starting the controller manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		oamLog.Error(err, "problem running manager")

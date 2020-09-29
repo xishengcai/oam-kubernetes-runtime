@@ -32,8 +32,14 @@ var (
 	KindDeployment = reflect.TypeOf(appsv1.Deployment{}).Name()
 	//KindService is the k8s Service kind.
 	KindService = reflect.TypeOf(corev1.Service{}).Name()
+	//KindStatefulSet is the k8s StatefulSet kind
+	KindStatefulSet = reflect.TypeOf(appsv1.StatefulSet{}).Name()
+	//KindVolumeTrait is the k8s VolumeTrait kind
+	KindVolumeTrait = reflect.TypeOf(v1alpha2.VolumeTrait{}).Name()
 	// ReconcileWaitResult is the time to wait between reconciliation.
 	ReconcileWaitResult = reconcile.Result{RequeueAfter: 30 * time.Second}
+
+	LabelKeyChildResource = "ChildResource"
 )
 
 const (

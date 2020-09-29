@@ -152,6 +152,15 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		r.passThroughObjMeta(ac.ObjectMeta, t)
 		traits = append(traits, &Trait{Object: *t})
 		traitDefs = append(traitDefs, *traitDef)
+
+		if t.GetKind() == util.KindVolumeTrait{
+
+			if t.GetKind() == util.KindVolumeTrait{
+				w.SetLabels(map[string]string{
+					util.LabelKeyChildResource: util.KindStatefulSet,
+				})
+			}
+		}
 	}
 	if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
 		return nil, err

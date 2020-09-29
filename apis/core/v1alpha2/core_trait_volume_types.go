@@ -18,7 +18,6 @@ package v1alpha2
 
 import (
 	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/crossplane/oam-kubernetes-runtime/pkg/oam"
@@ -28,13 +27,20 @@ var _ oam.Trait = &VolumeTrait{}
 
 // A VolumeTraitSpec defines the desired state of a VolumeTrait.
 type VolumeTraitSpec struct {
-
-	VolumeMounts corev1.VolumeMount `json:"volumeMounts,omitempty" patchStrategy:"merge" patchMergeKey:"mountPath" protobuf:"bytes,9,rep,name=volumeMounts"`
-
-	VolumeClaimTemplates corev1.PersistentVolume `json:"volumeClaimTemplates"`
-
+	VolumeList []VolumeMountItem `json:"volumeList"`
 	// WorkloadReference to the workload this trait applies to.
 	WorkloadReference runtimev1alpha1.TypedReference `json:"workloadRef"`
+}
+
+type VolumeMountItem struct {
+	ContainerIndex int        `json:"containerIndex"`
+	Paths          []PathItem `json:"paths"`
+}
+
+type PathItem struct {
+	StorageClassName string             `json:"storageClassName"`
+	Size             string             `json:"size"`
+	Path             string             `json:"path"`
 }
 
 // A VolumeTraitStatus represents the observed state of a
