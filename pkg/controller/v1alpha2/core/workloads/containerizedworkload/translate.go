@@ -33,8 +33,12 @@ import (
 var (
 	deploymentKind       = reflect.TypeOf(appsv1.Deployment{}).Name()
 	deploymentAPIVersion = appsv1.SchemeGroupVersion.String()
+
 	serviceKind          = reflect.TypeOf(corev1.Service{}).Name()
 	serviceAPIVersion    = corev1.SchemeGroupVersion.String()
+
+	statefulKind       = reflect.TypeOf(appsv1.StatefulSet{}).Name()
+	statefulSetAPIVersion = appsv1.SchemeGroupVersion.String()
 )
 
 // Reconcile error strings.
@@ -266,8 +270,8 @@ func TranslateStatefulSetWorkload(ctx context.Context, w oam.Workload) ([]oam.Ob
 
 	d := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       deploymentKind,
-			APIVersion: deploymentAPIVersion,
+			Kind:       statefulKind,
+			APIVersion: statefulSetAPIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cw.GetName(),
