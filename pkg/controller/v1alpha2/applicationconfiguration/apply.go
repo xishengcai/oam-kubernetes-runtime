@@ -80,27 +80,27 @@ func (a *workloads) Apply(ctx context.Context, status []v1alpha2.WorkloadStatus,
 			Name:       wl.Workload.GetName(),
 		}
 
-		for _, trait := range wl.Traits {
-			if trait.HasDep {
-				continue
-			}
-			//  We only patch a TypedReference object to the trait if it asks for it
-			t := trait.Object
-			if traitDefinition, err := util.FetchTraitDefinition(ctx, a.rawClient, &trait.Object); err == nil {
-				workloadRefPath := traitDefinition.Spec.WorkloadRefPath
-				if len(workloadRefPath) != 0 {
-					if err := fieldpath.Pave(t.UnstructuredContent()).SetValue(workloadRefPath, workloadRef); err != nil {
-						return errors.Wrapf(err, errFmtSetWorkloadRef, t.GetName(), wl.Workload.GetName())
-					}
-				}
-			} else {
-				return errors.Wrapf(err, errFmtGetTraitDefinition, t.GetAPIVersion(), t.GetKind(), t.GetName())
-			}
-
-			if err := a.client.Apply(ctx, &trait.Object, ao...); err != nil {
-				return errors.Wrapf(err, errFmtApplyTrait, t.GetAPIVersion(), t.GetKind(), t.GetName())
-			}
-		}
+		//for _, trait := range wl.Traits {
+		//	if trait.HasDep {
+		//		continue
+		//	}
+		//	//  We only patch a TypedReference object to the trait if it asks for it
+		//	t := trait.Object
+		//	if traitDefinition, err := util.FetchTraitDefinition(ctx, a.rawClient, &trait.Object); err == nil {
+		//		workloadRefPath := traitDefinition.Spec.WorkloadRefPath
+		//		if len(workloadRefPath) != 0 {
+		//			if err := fieldpath.Pave(t.UnstructuredContent()).SetValue(workloadRefPath, workloadRef); err != nil {
+		//				return errors.Wrapf(err, errFmtSetWorkloadRef, t.GetName(), wl.Workload.GetName())
+		//			}
+		//		}
+		//	} else {
+		//		return errors.Wrapf(err, errFmtGetTraitDefinition, t.GetAPIVersion(), t.GetKind(), t.GetName())
+		//	}
+		//
+		//	if err := a.client.Apply(ctx, &trait.Object, ao...); err != nil {
+		//		return errors.Wrapf(err, errFmtApplyTrait, t.GetAPIVersion(), t.GetKind(), t.GetName())
+		//	}
+		//}
 
 		for _, s := range wl.Scopes {
 			return a.applyScope(ctx, wl, s, workloadRef)

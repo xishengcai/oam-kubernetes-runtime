@@ -43,7 +43,6 @@ const (
 	errRenderWorkload     = "cannot render workload"
 	errApplyDeployment    = "cannot apply the deployment"
 	errApplyStatefulSet   = "cannot apply the statefulSet"
-	childResourceLabelKey = "app.oam.dev/childResource"
 )
 
 const (
@@ -105,7 +104,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	childResource := workload.Labels[childResourceLabelKey]
+	childResource := workload.Labels[util.LabelKeyChildResource]
 
 	//r.childResource = childResourceValue
 	workload.Status.Resources = nil
@@ -190,5 +189,6 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(src).
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&corev1.Service{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&appsv1.StatefulSet{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }

@@ -46,11 +46,11 @@ func (r *Reconciler) renderDeployment(ctx context.Context,
 	return deploy, nil
 }
 
-// create a corresponding deployment
+// create a corresponding statefulset
 func (r *Reconciler) renderStatefulSet(ctx context.Context,
 	workload *v1alpha2.ContainerizedWorkload) (*appsv1.StatefulSet, error) {
 
-	resources, err := TranslateContainerWorkload(ctx, workload)
+	resources, err := TranslateStatefulSetWorkload(ctx, workload)
 	if err != nil {
 		return nil, err
 	}
@@ -68,9 +68,9 @@ func (r *Reconciler) renderStatefulSet(ctx context.Context,
 			}
 		}
 	}
-	r.log.Info(" rendered a statefulSet", "statefulSet", sts.Spec.Template.Spec)
+	r.log.Info(" rendered a statefulSet", "statefulSet", sts.Spec)
 
-	// set the controller reference so that we can watch this deployment and it will be deleted automatically
+	// set the controller reference so that we can watch this statefulSet and it will be deleted automatically
 	if err := ctrl.SetControllerReference(workload, sts, r.Scheme); err != nil {
 		return nil, err
 	}

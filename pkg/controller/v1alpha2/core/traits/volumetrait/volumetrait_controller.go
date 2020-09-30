@@ -118,8 +118,8 @@ func (r *Reconcile) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return result, err
 	}
 
-	r.record.Event(eventObj, event.Normal("Manual scalar applied",
-		fmt.Sprintf("Trait `%s` successfully scaled a resource to %v instances",
+	r.record.Event(eventObj, event.Normal("Volume Trait applied",
+		fmt.Sprintf("Trait `%s` successfully mount volume  to %v ",
 			volumeTrait.Name, volumeTrait.Spec.VolumeList)))
 
 	return ctrl.Result{}, util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileSuccess())
@@ -147,7 +147,6 @@ patch pvcList
 // identify child resources and add volume
 func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 	volumeTrait oamv1alpha2.VolumeTrait, resources []*unstructured.Unstructured) (ctrl.Result, error) {
-	// scale all the resources that we can scale
 	isController := false
 	bod := true
 	// Update owner references
@@ -213,12 +212,12 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 					},
 				})
 			}
-			err := unstructured.SetNestedField(res.Object, volumeMounts, fmt.Sprintf("spec.template.spec.containers[%d]", item.ContainerIndex), "volumeMounts")
-			if err != nil {
-				mLog.Error(err, "Failed to patch a spec.template.container[x].volumeMounts for volume trait")
-				return util.ReconcileWaitResult,
-					util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errPatchTobeScaledResource)))
-			}
+			//err := unstructured.SetNestedField(res.Object, volumeMounts, fmt.Sprintf("spec.template.spec.containers[%d]", item.ContainerIndex), "volumeMounts")
+			//if err != nil {
+			//	mLog.Error(err, "Failed to patch a spec.template.container[x].volumeMounts for volume trait")
+			//	return util.ReconcileWaitResult,
+			//		util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errPatchTobeScaledResource)))
+			//}
 		}
 		err = unstructured.SetNestedField(res.Object, volumes, "spec.template", "volumes")
 		if err != nil {
@@ -238,7 +237,7 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 
 		// merge patch to modify the resource
 		if err := r.Patch(ctx, res, resPatch, client.FieldOwner(volumeTrait.GetUID())); err != nil {
-			mLog.Error(err, "Failed to scale a resource")
+			mLog.Error(err, "Failed to mount volume a resource")
 			return util.ReconcileWaitResult,
 				util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errMountVolume)))
 		}
