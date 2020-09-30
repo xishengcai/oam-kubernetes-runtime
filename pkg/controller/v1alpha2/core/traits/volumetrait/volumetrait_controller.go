@@ -213,12 +213,12 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 					},
 				})
 			}
-			//err := unstructured.SetNestedField(res.Object, volumeMounts, fmt.Sprintf("spec.template.spec.containers[%d]", item.ContainerIndex), "volumeMounts")
-			//if err != nil {
-			//	mLog.Error(err, "Failed to patch a spec.template.container[x].volumeMounts for volume trait")
-			//	return util.ReconcileWaitResult,
-			//		util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errPatchTobeScaledResource)))
-			//}
+			err := unstructured.SetNestedField(res.Object, volumeMounts, fmt.Sprintf("spec.template.spec.containers[%d]", item.ContainerIndex), "volumeMounts")
+			if err != nil {
+				mLog.Error(err, "Failed to patch a spec.template.container[x].volumeMounts for volume trait")
+				return util.ReconcileWaitResult,
+					util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errPatchTobeScaledResource)))
+			}
 		}
 		err = unstructured.SetNestedField(res.Object, volumes, "spec.template", "volumes")
 		if err != nil {

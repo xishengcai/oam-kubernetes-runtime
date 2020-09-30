@@ -28,6 +28,7 @@ type PathItem struct {
 	Path             string             `json:"path"`
 }
 ```
+        apply deployment
 
 ## 2. 功能目标
 1. oam ContainerizedWorkload child resource 支持 动态工作负载，原先只支持deployment，现在
@@ -44,15 +45,17 @@ type PathItem struct {
 - set workload label: if find trait volume, set label   app.oam.dev/childResource=StatefulSet 
 - apply workload
 
+多态只在第一次apply container workload 的时候，决定子负载类型，后面增删volumeTrait不会影响子负载类型。
+
 2. container workload
 - apply childResource [deployment|statefulSet, service]
     if label  app.oam.dev/childResource==StatefulSet,
-        apply deployment
     else
         apply statefulSet
       
 2. volumeTrait
-- create pvc by storageClassName and size
+- fetchWorkloadChildResources by traits 
+- create pvc by storageClassName and size 
 - patch Volumes and VolumeMount
     
 
