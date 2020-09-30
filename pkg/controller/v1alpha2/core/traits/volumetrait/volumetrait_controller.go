@@ -62,7 +62,7 @@ func (r *Reconcile) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// Reconcile to reconcile manual trait.
+// Reconcile to reconcile volume trait.
 // +kubebuilder:rbac:groups=core.oam.dev,resources=volumetraits,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core.oam.dev,resources=volumetraits/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.oam.dev,resources=containerizedworkloads,verbs=get;list;
@@ -70,6 +70,7 @@ func (r *Reconcile) SetupWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:rbac:groups=core.oam.dev,resources=workloaddefinition,verbs=get;list;
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 func (r *Reconcile) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	mLog := r.log.WithValues("volume trait", req.NamespacedName)
