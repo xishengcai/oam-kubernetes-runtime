@@ -36,6 +36,8 @@ var (
 	KindStatefulSet = reflect.TypeOf(appsv1.StatefulSet{}).Name()
 	//KindVolumeTrait is the k8s VolumeTrait kind
 	KindVolumeTrait = reflect.TypeOf(v1alpha2.VolumeTrait{}).Name()
+	//KindPersistentVolumeClaim is the k8s PersistentVolumeClaim kind
+	KindPersistentVolumeClaim = reflect.TypeOf(corev1.PersistentVolumeClaim{}).Name()
 	// ReconcileWaitResult is the time to wait between reconciliation.
 	ReconcileWaitResult = reconcile.Result{RequeueAfter: 30 * time.Second}
 

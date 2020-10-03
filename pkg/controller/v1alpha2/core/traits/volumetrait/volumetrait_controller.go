@@ -27,9 +27,8 @@ import (
 
 // Reconcile error strings.
 const (
-	errQueryOpenAPI            = "failed to query openAPI"
-	errPatchTobeScaledResource = "cannot patch the resource for scale"
-	errMountVolume             = "cannot scale the resource"
+	errQueryOpenAPI = "failed to query openAPI"
+	errMountVolume  = "cannot scale the resource"
 )
 
 // Setup adds a controller that reconciles ContainerizedWorkload.
@@ -172,6 +171,7 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 	}
 
 	for _, res := range resources {
+
 		if res.GetKind() != util.KindStatefulSet && res.GetKind() != util.KindDeployment {
 			continue
 		}
@@ -180,22 +180,26 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 			"resource name", res.GetName(), "UID", res.GetUID())
 		cpmeta.AddOwnerReference(res, ownerRef)
 
-		var volumes []v1.Volume
+		var volumes []interface{}
 		var pvcList []v1.PersistentVolumeClaim
 		for _, item := range volumeTrait.Spec.VolumeList {
 			var volumeMounts []v1.VolumeMount
 			for pathIndex, path := range item.Paths {
-				pvcName := fmt.Sprintf("%s-%s-%d-%d", res.GetKind(), res.GetName(), item.ContainerIndex, pathIndex)
+				pvcName := fmt.Sprintf("%s-%s-%d-%d", strings.ToLower(res.GetKind()), res.GetName(), item.ContainerIndex, pathIndex)
 				volumes = append(volumes, v1.Volume{
-					Name: pvcName,
+					Name:         pvcName,
 					VolumeSource: v1.VolumeSource{PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: pvcName}},
 				})
 				volumeMount := v1.VolumeMount{
-					Name: pvcName,
+					Name:      pvcName,
 					MountPath: path.Path,
 				}
 				volumeMounts = append(volumeMounts, volumeMount)
 				pvcList = append(pvcList, v1.PersistentVolumeClaim{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "v1",
+						Kind:       util.KindPersistentVolumeClaim,
+					},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      pvcName,
 						Namespace: volumeTrait.Namespace,
@@ -213,28 +217,27 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 					},
 				})
 			}
-			err := unstructured.SetNestedField(res.Object, volumeMounts, fmt.Sprintf("spec.template.spec.containers[%d]", item.ContainerIndex), "volumeMounts")
-			if err != nil {
-				mLog.Error(err, "Failed to patch a spec.template.container[x].volumeMounts for volume trait")
-				return util.ReconcileWaitResult,
-					util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errPatchTobeScaledResource)))
+
+			containers, _, _ := unstructured.NestedFieldNoCopy(res.Object, "spec", "template", "spec", "containers")
+			c, ok := containers.([]interface{})[item.ContainerIndex].(map[string]interface{})
+			if ok {
+				c["volumeMounts"] = volumeMounts
 			}
-		}
-		err = unstructured.SetNestedField(res.Object, volumes, "spec.template", "volumes")
-		if err != nil {
-			mLog.Error(err, "Failed to patch a resource.spec.template.volumes for volume trait")
-			return util.ReconcileWaitResult,
-				util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errPatchTobeScaledResource)))
+
 		}
 
+		spec, _, _ := unstructured.NestedFieldNoCopy(res.Object, "spec", "template", "spec")
+		spec.(map[string]interface{})["volumes"] = volumes
+
 		// merge patch to modify the pvc
-		//for _, pvc := range pvcList {
-		//	if err := r.Patch(ctx, pvc, resPatch, client.FieldOwner(volumeTrait.GetUID())); err != nil {
-		//		mLog.Error(err, "Failed to scale a resource")
-		//		return util.ReconcileWaitResult,
-		//			util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errMountVolume)))
-		//	}
-		//}
+		applyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(volumeTrait.GetUID())}
+		for _, pvc := range pvcList {
+			if err := r.Patch(ctx, &pvc, client.Apply, applyOpts...); err != nil {
+				mLog.Error(err, "Failed to create a pvc")
+				return util.ReconcileWaitResult,
+					util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errMountVolume)))
+			}
+		}
 
 		// merge patch to modify the resource
 		if err := r.Patch(ctx, res, resPatch, client.FieldOwner(volumeTrait.GetUID())); err != nil {
