@@ -139,7 +139,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		// garbage collect the statefulSet that we created but not needed
 		if err := r.cleanupResources(ctx, &workload, util.KindStatefulSet, sts.UID); err != nil {
 			log.Error(err, "Failed to clean up resources")
-			r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
+			r.record.Event(eventObj, event.Warning(errApplyStatefulSet, err))
 		}
 	} else {
 		deploy, err := r.renderDeployment(ctx, &workload)

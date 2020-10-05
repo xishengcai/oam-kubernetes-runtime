@@ -17,7 +17,7 @@ spec:
 #            metadata:
 #              name: example-appconfig-trait
 #            spec:
-#              replicaCount: 3
+#              replicaCount: 2
         - trait:
             apiVersion: core.oam.dev/v1alpha2
             kind: VolumeTrait
@@ -27,9 +27,12 @@ spec:
               volumeList:
               - containerIndex: 0
                 paths:
-                - size: 10Gi
+                - size: 20Gi
                   path: /var/log/test
                   storageClassName: ali-sc
+#                - size: 30Gi
+#                  path: /var/log/test2
+#                  storageClassName: ali-sc
 #      status:
 #        - scopeRef:
 #            apiVersion: core.oam.dev/v1alpha2

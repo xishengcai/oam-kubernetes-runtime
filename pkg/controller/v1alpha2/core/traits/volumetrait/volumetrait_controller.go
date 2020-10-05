@@ -5,6 +5,7 @@ import (
 	"fmt"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/types"
 	"strings"
 
 	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
@@ -29,6 +30,7 @@ import (
 const (
 	errQueryOpenAPI = "failed to query openAPI"
 	errMountVolume  = "cannot scale the resource"
+	errApplyPVC     = "cannot apply the pvc"
 )
 
 // Setup adds a controller that reconciles ContainerizedWorkload.
@@ -112,7 +114,7 @@ func (r *Reconcile) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Scale the child resources that we know how to scale
-	result, err := r.mountVolume(ctx, mLog, volumeTrait, resources)
+	result, err := r.mountVolume(ctx, mLog, &volumeTrait, resources)
 	if err != nil {
 		r.record.Event(eventObj, event.Warning(errMountVolume, err))
 		return result, err
@@ -125,30 +127,21 @@ func (r *Reconcile) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileSuccess())
 }
 
-/*
-1. 	var volumes []v1.Volume
-    var pvcList []v1.PersistentVolumeClaim
-
-2. for i, item := volumeTrait.Spec.VolumeList{
-	var volumeMounts []v1.VolumeMount
-	for j, v := range item.Paths{
-		pvcName := fmt.Sprintf("%s-%s-%d-%d", res.GetKind(),res.GetName(), item.ContainerIndex,pathIndex)
-		append(volumeMounts..)
-		append(pvc...)
-		append(volumes...)
-	 }
-   }
-
-3. patch
-patch res..container[x].volumeMounts
-patch res..volumes
-patch pvcList
-*/
 // identify child resources and add volume
 func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
-	volumeTrait oamv1alpha2.VolumeTrait, resources []*unstructured.Unstructured) (ctrl.Result, error) {
+	volumeTrait *oamv1alpha2.VolumeTrait, resources []*unstructured.Unstructured) (ctrl.Result, error) {
 	isController := false
 	bod := true
+	var statusResources []cpv1alpha1.TypedReference
+
+	// find the resource object to record the event to, default is the parent appConfig.
+	eventObj, err := util.LocateParentAppConfig(ctx, r.Client, volumeTrait)
+	if eventObj == nil {
+		// fallback to workload itself
+		mLog.Error(err, "Failed to find the parent resource", "volumeTrait", volumeTrait.Name)
+		eventObj = volumeTrait
+	}
+
 	// Update owner references
 	ownerRef := metav1.OwnerReference{
 		APIVersion:         volumeTrait.APIVersion,
@@ -162,12 +155,12 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 	schemaDoc, err := r.DiscoveryClient.OpenAPISchema()
 	if err != nil {
 		return util.ReconcileWaitResult,
-			util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errQueryOpenAPI)))
+			util.PatchCondition(ctx, r, volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errQueryOpenAPI)))
 	}
 	_, err = openapi.NewOpenAPIData(schemaDoc)
 	if err != nil {
 		return util.ReconcileWaitResult,
-			util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errQueryOpenAPI)))
+			util.PatchCondition(ctx, r, volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errQueryOpenAPI)))
 	}
 
 	for _, res := range resources {
@@ -230,25 +223,67 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 		spec.(map[string]interface{})["volumes"] = volumes
 
 		// merge patch to modify the pvc
+		var pvcUidList []types.UID
+
 		applyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(volumeTrait.GetUID())}
 		for _, pvc := range pvcList {
+			pvcExists := &v1.PersistentVolumeClaim{}
+			if err := r.Client.Get(ctx, client.ObjectKey{Name: pvc.Name, Namespace: pvc.Namespace}, pvcExists); err == nil{
+				mLog.Info("pvc has been created. Can't modify spec", "pvcName", pvc.Name)
+				pvcUidList = append(pvcUidList, pvcExists.UID)
+				statusResources = append(statusResources,
+					cpv1alpha1.TypedReference{
+						APIVersion: pvcExists.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+						Kind:       pvcExists.GetObjectKind().GroupVersionKind().Kind,
+						Name:       pvcExists.GetName(),
+						UID:        pvcExists.UID,
+					},
+				)
+				continue
+			}
+
 			if err := r.Patch(ctx, &pvc, client.Apply, applyOpts...); err != nil {
 				mLog.Error(err, "Failed to create a pvc")
 				return util.ReconcileWaitResult,
-					util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errMountVolume)))
+					util.PatchCondition(ctx, r, volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errMountVolume)))
 			}
+			r.record.Event(eventObj, event.Normal("PVC created",
+				fmt.Sprintf("VolumeTrait `%s` successfully server side patched a pvc `%s`",
+					volumeTrait.Name, pvc.Name)))
+
+			pvcUidList = append(pvcUidList, pvc.UID)
+
+			statusResources = append(statusResources,
+				cpv1alpha1.TypedReference{
+					APIVersion: pvc.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+					Kind:       pvc.GetObjectKind().GroupVersionKind().Kind,
+					Name:       pvc.GetName(),
+					UID:        pvc.UID,
+				},
+			)
+
 		}
 
 		// merge patch to modify the resource
 		if err := r.Patch(ctx, res, resPatch, client.FieldOwner(volumeTrait.GetUID())); err != nil {
 			mLog.Error(err, "Failed to mount volume a resource")
 			return util.ReconcileWaitResult,
-				util.PatchCondition(ctx, r, &volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errMountVolume)))
+				util.PatchCondition(ctx, r, volumeTrait, cpv1alpha1.ReconcileError(errors.Wrap(err, errMountVolume)))
 		}
 
+		if err := r.cleanupResources(ctx, volumeTrait, pvcUidList); err != nil {
+			mLog.Error(err, "Failed to clean up resources")
+			r.record.Event(eventObj, event.Warning(errApplyPVC, err))
+		}
 		mLog.Info("Successfully patch a resource", "resource GVK", res.GroupVersionKind().String(),
 			"res UID", res.GetUID(), "target volumeClaimTemplates", volumeTrait.Spec.VolumeList)
 
 	}
+
+	volumeTrait.Status.Resources = statusResources
+	if err := r.Status().Update(ctx, volumeTrait); err != nil {
+		return util.ReconcileWaitResult, err
+	}
+
 	return ctrl.Result{}, nil
 }

@@ -47,6 +47,9 @@ type PathItem struct {
 // VolumeTrait.
 type VolumeTraitStatus struct {
 	runtimev1alpha1.ConditionedStatus `json:",inline"`
+
+	// Resources managed by this containerised workload.
+	Resources []runtimev1alpha1.TypedReference `json:"resources,omitempty"`
 }
 
 // +kubebuilder:object:root=true

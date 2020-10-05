@@ -108,7 +108,7 @@ func resourcesHealthStatus(ctx context.Context, log logging.Logger, client clien
 			err := resourceHealthStatus(ctx, client, namespace, resourceRef)
 			status <- (err == nil)
 			if err != nil {
-				//log.Debug("Unhealthy resource", "resource", resourceRef.Name, "error", err)
+				log.Debug("Unhealthy resource", "resource", resourceRef.Name, "error", err)
 			}
 		}(ref)
 	}
