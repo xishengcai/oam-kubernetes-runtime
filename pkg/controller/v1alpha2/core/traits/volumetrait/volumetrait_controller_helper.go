@@ -37,7 +37,7 @@ func (r *Reconcile) cleanupResources(ctx context.Context,
 		if err := r.Delete(ctx, pvc); err != nil {
 			return err
 		}
-		log.Info("gc volumeTrait pvc resources",res.Kind,res.UID)
+		log.Info("gc volumeTrait pvc resources", res.Kind, res.UID)
 	}
 
 	return nil

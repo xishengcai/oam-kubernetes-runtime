@@ -228,7 +228,7 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 		applyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(volumeTrait.GetUID())}
 		for _, pvc := range pvcList {
 			pvcExists := &v1.PersistentVolumeClaim{}
-			if err := r.Client.Get(ctx, client.ObjectKey{Name: pvc.Name, Namespace: pvc.Namespace}, pvcExists); err == nil{
+			if err := r.Client.Get(ctx, client.ObjectKey{Name: pvc.Name, Namespace: pvc.Namespace}, pvcExists); err == nil {
 				mLog.Info("pvc has been created. Can't modify spec", "pvcName", pvc.Name)
 				pvcUidList = append(pvcUidList, pvcExists.UID)
 				statusResources = append(statusResources,
