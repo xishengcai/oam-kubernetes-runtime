@@ -19,8 +19,8 @@ spec:
         - name: nginx
           image: nginx
           ports:
-            - http: 80
-              name: http
+            - containerPort: 80
+              name: nginx
   parameters:
     - name: instance-name
       required: true
