@@ -101,8 +101,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// applicationConfiguration write label by workload child define
 	if workload.Labels == nil {
-		log.Info("not define child resource")
-		return ctrl.Result{}, nil
+		log.Info("label is nil, default child resource deployment")
 	}
 
 	childResource := workload.Labels[util.LabelKeyChildResource]

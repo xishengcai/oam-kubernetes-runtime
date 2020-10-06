@@ -11,13 +11,13 @@ spec:
         - name: image
           value: wordpress:php7.2
       traits:
-#        - trait:
-#            apiVersion: core.oam.dev/v1alpha2
-#            kind: ManualScalerTrait
-#            metadata:
-#              name: example-appconfig-trait
-#            spec:
-#              replicaCount: 2
+        - trait:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: ManualScalerTrait
+            metadata:
+              name: example-appconfig-trait
+            spec:
+              replicaCount: 2
         - trait:
             apiVersion: core.oam.dev/v1alpha2
             kind: VolumeTrait
