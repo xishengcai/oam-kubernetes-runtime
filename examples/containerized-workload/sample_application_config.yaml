@@ -33,8 +33,9 @@ spec:
                 - size: 30Gi
                   path: /var/log/test2
                   storageClassName: ali-sc
-#      status:
-#        - scopeRef:
-#            apiVersion: core.oam.dev/v1alpha2
-#            kind: HealthScope
-#            name: example-health-scope
+      scopes:
+        - scopeRef:
+            apiVersion: core.oam.dev/v1alpha2
+            kind: HealthScope
+            name: example-health-scope
+
