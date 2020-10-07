@@ -2,10 +2,15 @@ package volumetrait
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
+	clientappv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 	"strings"
 
 	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
@@ -42,7 +47,8 @@ func Setup(mgr ctrl.Manager, log logging.Logger) error {
 		record:          event.NewAPIRecorder(mgr.GetEventRecorderFor("volumeTrait")),
 		Scheme:          mgr.GetScheme(),
 	}
-	return reconcile.SetupWithManager(mgr)
+	return reconcile.SetupWithManager(mgr, log)
+
 }
 
 // Reconcile reconciles a VolumeTrait object
@@ -55,11 +61,18 @@ type Reconcile struct {
 }
 
 //SetupWithManager to setup k8s controller.
-func (r *Reconcile) SetupWithManager(mgr ctrl.Manager) error {
+func (r *Reconcile) SetupWithManager(mgr ctrl.Manager, log logging.Logger) error {
 	name := "oam/" + strings.ToLower(oamv1alpha2.VolumeTraitKind)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		For(&oamv1alpha2.VolumeTrait{}).
+		Owns(&v1.PersistentVolumeClaim{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&source.Kind{Type: &oamv1alpha2.VolumeTrait{}}, &VolumeHandler{
+			Client:     mgr.GetClient(),
+			Logger:     log,
+			AppsClient: clientappv1.NewForConfigOrDie(mgr.GetConfig()),
+		}).
 		Complete(r)
 }
 
@@ -173,7 +186,15 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 			"resource name", res.GetName(), "UID", res.GetUID())
 		cpmeta.AddOwnerReference(res, ownerRef)
 
-		var volumes []interface{}
+		spec, _, _ := unstructured.NestedFieldNoCopy(res.Object, "spec", "template", "spec")
+		ovmInterface, _ := spec.(map[string]interface{})["volumes"].([]interface{})
+		var oldVolumes []v1.Volume
+		if len(ovmInterface) != 0 {
+			b, _ := json.Marshal(ovmInterface)
+			_ = json.Unmarshal(b, &oldVolumes)
+		}
+
+		var volumes []v1.Volume
 		var pvcList []v1.PersistentVolumeClaim
 		for _, item := range volumeTrait.Spec.VolumeList {
 			var volumeMounts []v1.VolumeMount
@@ -212,14 +233,29 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 			}
 
 			containers, _, _ := unstructured.NestedFieldNoCopy(res.Object, "spec", "template", "spec", "containers")
-			c, ok := containers.([]interface{})[item.ContainerIndex].(map[string]interface{})
-			if ok {
-				c["volumeMounts"] = volumeMounts
+			c, _ := containers.([]interface{})[item.ContainerIndex].(map[string]interface{})
+			vmInterface, _ := c["volumeMounts"].([]interface{})
+
+			if len(vmInterface) != 0 {
+				var vms []v1.VolumeMount
+				b, _ := json.Marshal(vmInterface)
+				_ = json.Unmarshal(b, &vms)
+				for _, o := range vms {
+					for _,v := range oldVolumes{
+						if v.Name == o.Name && v.PersistentVolumeClaim == nil{
+							volumeMounts = append(volumeMounts, o)
+						}
+					}
+				}
 			}
+			c["volumeMounts"] = volumeMounts
 
 		}
-
-		spec, _, _ := unstructured.NestedFieldNoCopy(res.Object, "spec", "template", "spec")
+		for _, oldVm := range oldVolumes {
+			if oldVm.PersistentVolumeClaim == nil {
+				volumes = append(volumes, oldVm)
+			}
+		}
 		spec.(map[string]interface{})["volumes"] = volumes
 
 		// merge patch to modify the pvc
@@ -242,6 +278,7 @@ func (r *Reconcile) mountVolume(ctx context.Context, mLog logr.Logger,
 				continue
 			}
 
+			cpmeta.AddOwnerReference(&pvc, ownerRef)
 			if err := r.Patch(ctx, &pvc, client.Apply, applyOpts...); err != nil {
 				mLog.Error(err, "Failed to create a pvc")
 				return util.ReconcileWaitResult,

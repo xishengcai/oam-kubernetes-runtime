@@ -42,6 +42,7 @@ var (
 	ReconcileWaitResult = reconcile.Result{RequeueAfter: 30 * time.Second}
 
 	LabelKeyChildResource = "app.oam.dev/childResource"
+	LabelKeyChildResourceName = "app.oam.dev/childResourceName"
 )
 
 const (

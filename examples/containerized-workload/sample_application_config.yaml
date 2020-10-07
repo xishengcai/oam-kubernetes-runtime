@@ -29,10 +29,10 @@ spec:
                 paths:
                 - size: 20Gi
                   path: /var/log/test
+                  storageClassName: alicloud-disk-ssd
+                - size: 30Gi
+                  path: /var/log/test2
                   storageClassName: ali-sc
-#                - size: 30Gi
-#                  path: /var/log/test2
-#                  storageClassName: ali-sc
 #      status:
 #        - scopeRef:
 #            apiVersion: core.oam.dev/v1alpha2

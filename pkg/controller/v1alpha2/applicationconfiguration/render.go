@@ -142,6 +142,7 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 
 	traits := make([]*Trait, 0, len(acc.Traits))
 	traitDefs := make([]v1alpha2.TraitDefinition, 0, len(acc.Traits))
+	volumeTraitExit := false
 	for _, ct := range acc.Traits {
 		t, traitDef, err := r.renderTrait(ctx, ct, ac, acc.ComponentName, ref, dag)
 		if err != nil {
@@ -154,14 +155,39 @@ func (r *components) renderComponent(ctx context.Context, acc v1alpha2.Applicati
 		traitDefs = append(traitDefs, *traitDef)
 
 		if t.GetKind() == util.KindVolumeTrait {
+			volumeTraitExit = true
 
-			if t.GetKind() == util.KindVolumeTrait {
-				w.SetLabels(map[string]string{
-					util.LabelKeyChildResource: util.KindStatefulSet,
+			if t.GetLabels() != nil {
+				continue
+			}
+			if ac.Generation == 1 {
+				t.SetLabels(map[string]string{
+					util.LabelKeyChildResource:     util.KindStatefulSet,
+					util.LabelKeyChildResourceName: w.GetName(),
+				})
+			} else {
+				t.SetLabels(map[string]string{
+					util.LabelKeyChildResource:     util.KindDeployment,
+					util.LabelKeyChildResourceName: w.GetName(),
 				})
 			}
+
+		}
+
+	}
+
+	if ac.Generation == 1 {
+		if volumeTraitExit {
+			w.SetLabels(map[string]string{
+				util.LabelKeyChildResource: util.KindStatefulSet,
+			})
+		} else {
+			w.SetLabels(map[string]string{
+				util.LabelKeyChildResource: util.KindDeployment,
+			})
 		}
 	}
+
 	if err := SetWorkloadInstanceName(traitDefs, w, c); err != nil {
 		return nil, err
 	}

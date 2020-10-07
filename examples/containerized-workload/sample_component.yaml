@@ -16,11 +16,6 @@ spec:
           env:
             - name: TEST_ENV
               value: test
-        - name: nginx
-          image: nginx
-          ports:
-            - containerPort: 80
-              name: nginx
   parameters:
     - name: instance-name
       required: true
