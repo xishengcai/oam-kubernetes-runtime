@@ -18,6 +18,7 @@ package containerizedworkload
 import (
 	"context"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 	"strings"
 
 	cpv1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
@@ -39,9 +40,12 @@ import (
 
 // Reconcile error strings.
 const (
-	errRenderWorkload     = "cannot render workload"
-	errApplyDeployment    = "cannot apply the deployment"
-	errApplyStatefulSet   = "cannot apply the statefulSet"
+	errRenderWorkload   = "cannot render workload"
+	errApplyDeployment  = "cannot apply the deployment"
+	errApplyStatefulSet = "cannot apply the statefulSet"
+	errRenderService    = "cannot render service"
+	errApplyService     = "cannot apply the service"
+	errGcService        = "cannot gc the service"
 )
 
 // Setup adds a controller that reconciles ContainerizedWorkload.
@@ -101,6 +105,8 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	//r.childResource = childResourceValue
 	workload.Status.Resources = nil
+	var childResourceWorkload runtime.Object
+	applyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(workload.GetUID())}
 	if childResource == util.KindStatefulSet {
 		sts, err := r.renderStatefulSet(ctx, &workload)
 		if err != nil {
@@ -110,7 +116,6 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderWorkload)))
 		}
 		// server side apply, only the fields we set are touched
-		applyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(workload.GetUID())}
 		if err := r.Patch(ctx, sts, client.Apply, applyOpts...); err != nil {
 			log.Error(err, "Failed to apply to a statefulSet")
 			r.record.Event(eventObj, event.Warning(errApplyStatefulSet, err))
@@ -133,6 +138,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Error(err, "Failed to clean up resources")
 			r.record.Event(eventObj, event.Warning(errApplyStatefulSet, err))
 		}
+		childResourceWorkload = sts
 	} else {
 		deploy, err := r.renderDeployment(ctx, &workload)
 		if err != nil {
@@ -142,7 +148,6 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderWorkload)))
 		}
 		// server side apply, only the fields we set are touched
-		applyOpts := []client.PatchOption{client.ForceOwnership, client.FieldOwner(workload.GetUID())}
 		if err := r.Patch(ctx, deploy, client.Apply, applyOpts...); err != nil {
 			log.Error(err, "Failed to apply to a deployment")
 			r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
@@ -166,10 +171,49 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Error(err, "Failed to clean up resources")
 			r.record.Event(eventObj, event.Warning(errApplyDeployment, err))
 		}
+		childResourceWorkload = deploy
 	}
 	if err := r.Status().Update(ctx, &workload); err != nil {
 		return util.ReconcileWaitResult, err
 	}
+
+	service, err := r.renderService(ctx, &workload, childResourceWorkload)
+	if err != nil {
+		log.Error(err, "Failed to render a service")
+		r.record.Event(eventObj, event.Warning(errRenderService, err))
+		return util.ReconcileWaitResult,
+			util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errRenderService)))
+	}
+	// server side apply the service
+	if err := r.Patch(ctx, service, client.Apply, applyOpts...); err != nil {
+		log.Error(err, "Failed to apply a service")
+		r.record.Event(eventObj, event.Warning(errApplyService, err))
+		return util.ReconcileWaitResult,
+			util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileError(errors.Wrap(err, errApplyService)))
+	}
+	r.record.Event(eventObj, event.Normal("Service created",
+		fmt.Sprintf("Workload `%s` successfully server side patched a service `%s`",
+			workload.Name, service.Name)))
+	// garbage collect the service/deployments that we created but not needed
+	if err := r.cleanupResources(ctx, &workload, serviceKind, service.UID); err != nil {
+		log.Error(err, "Failed to clean up resources")
+		r.record.Event(eventObj, event.Warning(errGcService, err))
+	}
+
+	// record the new deployment, new service
+	workload.Status.Resources = append(workload.Status.Resources,
+		cpv1alpha1.TypedReference{
+			APIVersion: service.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+			Kind:       service.GetObjectKind().GroupVersionKind().Kind,
+			Name:       service.GetName(),
+			UID:        service.UID,
+		},
+	)
+
+	if err := r.Status().Update(ctx, &workload); err != nil {
+		return util.ReconcileWaitResult, err
+	}
+
 	return ctrl.Result{}, util.PatchCondition(ctx, r, &workload, cpv1alpha1.ReconcileSuccess())
 }
 
@@ -182,5 +226,6 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(src).
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&appsv1.StatefulSet{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&corev1.Service{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }

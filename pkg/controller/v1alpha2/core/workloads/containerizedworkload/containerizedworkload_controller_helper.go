@@ -102,7 +102,7 @@ func (r *Reconciler) cleanupResources(ctx context.Context,
 				if err := r.Delete(ctx, obj); err != nil {
 					return err
 				}
-				log.Info("gc containerizedWorkload childResource, Removed an orphaned: ", res.Kind, ",orphaned UID: ", res.UID)
+ 				log.Info("gc containerizedWorkload childResource, Removed an orphaned: ", res.Kind, ",orphaned UID: ", res.UID)
 			}
 		}
 	}
@@ -118,4 +118,30 @@ func generateChildResourceObj(objType string) runtime.Object {
 		return &appsv1.StatefulSet{}
 	}
 	return nil
+}
+
+
+// create a service for the deployment
+func (r *Reconciler) renderService(ctx context.Context,
+	workload *v1alpha2.ContainerizedWorkload, objs runtime.Object) (*corev1.Service, error) {
+	// create a service for the workload
+	service, err := ServiceInjector(ctx, workload, objs)
+	if err != nil {
+		return nil, err
+	}
+	if service == nil {
+		return nil, fmt.Errorf("internal error, service is not rendered correctly")
+	}
+	// the service injector lib doesn't set the namespace and serviceType
+	service.Namespace = workload.Namespace
+	service.Spec.Type = corev1.ServiceTypeNodePort
+	// k8s server-side patch complains if the protocol is not set
+	for i := 0; i < len(service.Spec.Ports); i++ {
+		service.Spec.Ports[i].Protocol = corev1.ProtocolTCP
+	}
+	// always set the controller reference so that we can watch this service and
+	if err := ctrl.SetControllerReference(workload, service, r.Scheme); err != nil {
+		return nil, err
+	}
+	return service, nil
 }

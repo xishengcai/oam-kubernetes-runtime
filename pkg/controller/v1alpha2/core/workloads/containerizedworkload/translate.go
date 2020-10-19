@@ -19,6 +19,7 @@ package containerizedworkload
 import (
 	"context"
 	"errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"reflect"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -477,24 +478,20 @@ func TranslateStatefulSetWorkload(ctx context.Context, w oam.Workload) ([]oam.Ob
 
 // ServiceInjector adds a Service object for the first Port on the first
 // Container for the first Deployment observed in a workload translation.
-func ServiceInjector(ctx context.Context, w oam.Workload, objs []oam.Object) ([]oam.Object, error) {
-	if objs == nil {
+func ServiceInjector(ctx context.Context, w oam.Workload, obj runtime.Object) (*corev1.Service, error) {
+	if obj == nil {
 		return nil, nil
 	}
 
-	for _, o := range objs {
-		d, ok := o.(*appsv1.Deployment)
-		if !ok {
-			continue
-		}
-
+	d, ok := obj.(*appsv1.Deployment)
+	if ok {
 		// We don't add a Service if there are no containers for the Deployment.
 		// This should never happen in practice.
 		if len(d.Spec.Template.Spec.Containers) < 1 {
-			continue
+			return nil, nil
 		}
 
-		s := &corev1.Service{
+		svc := &corev1.Service{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       serviceKind,
 				APIVersion: serviceAPIVersion,
@@ -518,7 +515,7 @@ func ServiceInjector(ctx context.Context, w oam.Workload, objs []oam.Object) ([]
 		// exclude the need for implementing garbage collection in the
 		// short-term in the case that ports are modified after creation.
 		if len(d.Spec.Template.Spec.Containers[0].Ports) > 0 {
-			s.Spec.Ports = []corev1.ServicePort{
+			svc.Spec.Ports = []corev1.ServicePort{
 				{
 					Name:       d.GetName(),
 					Port:       d.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort,
@@ -526,8 +523,51 @@ func ServiceInjector(ctx context.Context, w oam.Workload, objs []oam.Object) ([]
 				},
 			}
 		}
-		objs = append(objs, s)
-		break
+		return svc, nil
 	}
-	return objs, nil
+
+	s, ok := obj.(*appsv1.StatefulSet)
+	if ok {
+		// We don't add a Service if there are no containers for the statefulSet.
+		// This should never happen in practice.
+		if len(s.Spec.Template.Spec.Containers) < 1 {
+			return nil, nil
+		}
+
+		svc := &corev1.Service{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       serviceKind,
+				APIVersion: serviceAPIVersion,
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      s.GetName(),
+				Namespace: s.GetNamespace(),
+				Labels: map[string]string{
+					labelKey: string(w.GetUID()),
+				},
+			},
+			Spec: corev1.ServiceSpec{
+				Selector: s.Spec.Selector.MatchLabels,
+				Ports:    []corev1.ServicePort{},
+				Type:     corev1.ServiceTypeLoadBalancer,
+			},
+		}
+
+		// We only add a single Service for the Deployment, even if multiple
+		// ports or no ports are defined on the first container. This is to
+		// exclude the need for implementing garbage collection in the
+		// short-term in the case that ports are modified after creation.
+		if len(s.Spec.Template.Spec.Containers[0].Ports) > 0 {
+			svc.Spec.Ports = []corev1.ServicePort{
+				{
+					Name:       s.GetName(),
+					Port:       s.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort,
+					TargetPort: intstr.FromInt(int(s.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort)),
+				},
+			}
+		}
+
+		return svc, nil
+	}
+	return nil, nil
 }
